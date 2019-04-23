@@ -1,0 +1,27 @@
+<configuration>
+    <statusListener class="ch.qos.logback.core.status.OnConsoleStatusListener"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <encoder>
+            <pattern>%date{YYYY-MM-dd'T' HH:mm:ss.SSSXXX, UTC} [%level] %logger{36} [%thread] %message%n%xException</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <param name="queueSize" value="256"/>
+        <param name="neverBlock" value="true"/>
+        <appender-ref ref="CONSOLE"/>
+    </appender>
+
+    <logger name="org.http4s.blaze.channel.nio1.NIO1SocketServerGroup" level="ERROR" />
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC_CONSOLE"/>
+    </root>
+
+    <shutdownHook class="ch.qos.logback.core.hook.DelayingShutdownHook"/>
+
+</configuration>
