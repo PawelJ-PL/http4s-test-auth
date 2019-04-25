@@ -1,13 +1,14 @@
 package infrastructure.security.social_providers
 
 import cats.effect.Sync
+import cats.syntax.applicativeError._
 import cats.syntax.functor._
 import cats.syntax.either._
 import config.SocialAuthConfig
 import io.circe.{Decoder, HCursor}
 import org.http4s.{EntityDecoder, Uri}
 import org.http4s.circe.jsonOf
-import org.http4s.client.Client
+import org.http4s.client.{Client, UnexpectedStatus}
 
 class FacebookProvider[F[_]: Sync, U](facebookConfig: SocialAuthConfig)(implicit socialUserToU: SocialUser => U, client: Client[F]) extends SocialAuthProvider[F, U] {
   final val ProviderName = "facebook"
@@ -21,8 +22,11 @@ class FacebookProvider[F[_]: Sync, U](facebookConfig: SocialAuthConfig)(implicit
       .withQueryParam("fields", "email,first_name,last_name")
       .withQueryParam("access_token", accessToken)
 
-    val resp = client.expect[UserDataResponse](uri)
-    resp.map(r => socialUserToU(SocialUser(ProviderName, r.id, r.email, r.firstName, r.lastName))).map(Either.right[QueryFailed, U](_))
+    client.expect[UserDataResponse](uri)
+      .map(r => socialUserToU(SocialUser(ProviderName, r.id, r.email, r.firstName, r.lastName)).asRight[QueryFailed])
+      .recover {
+        case err: UnexpectedStatus => QueryFailed.UnexpectedStatus(err.status, err.getMessage()).asLeft[U]
+      }
   }
 }
 
