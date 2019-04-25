@@ -15,7 +15,7 @@ class NoAuthRoutes[F[_]: Sync](implicit jwtSupport: JwtSupport[F, Session]) exte
 
   val userNameSegment = pathVar[String]
   GET / "login" / userNameSegment |>> { username: String =>
-    JwtSupport[F, Session].generateToken(Session(User(username)))
+    JwtSupport[F, Session].generateToken(Session(User(username, "local", "some@example.org", None, None)))
       .flatMap(jwt => Ok(s"Hello $username").map(_.addCookie("session", jwt)))
   }
 }

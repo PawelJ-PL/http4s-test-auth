@@ -6,7 +6,7 @@ import cats.syntax.functor._
 import cats.syntax.either._
 import config.SocialAuthConfig
 import io.circe.{Decoder, HCursor}
-import org.http4s.{EntityDecoder, Uri}
+import org.http4s.{EntityDecoder, InvalidMessageBodyFailure, Uri}
 import org.http4s.circe.jsonOf
 import org.http4s.client.{Client, UnexpectedStatus}
 
@@ -26,6 +26,8 @@ class FacebookProvider[F[_]: Sync, U](facebookConfig: SocialAuthConfig)(implicit
       .map(r => socialUserToU(SocialUser(ProviderName, r.id, r.email, r.firstName, r.lastName)).asRight[QueryFailed])
       .recover {
         case err: UnexpectedStatus => QueryFailed.UnexpectedStatus(err.status, err.getMessage()).asLeft[U]
+        case err: InvalidMessageBodyFailure => QueryFailed.ResponseDecodeFailed(err.message, err.details, err.cause).asLeft[U]
+        case err => QueryFailed.UnexpectedError(err).asLeft[U]
       }
   }
 }

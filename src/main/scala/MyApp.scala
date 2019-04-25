@@ -15,7 +15,7 @@ import org.http4s.server.middleware.Logger
 import org.http4s.syntax.all._
 
 class MyApp[F[_]: Concurrent](appConfig: AppConfig, httpClient: Client[F]) {
-  final implicit val socialToUser: SocialUser => User = (sU: SocialUser) => User(sU.id)
+  final implicit val socialToUser: SocialUser => User = (sU: SocialUser) => User(sU.id, sU.provider, sU.email, sU.firstName, sU.lastName)
   implicit val client: Client[F] = httpClient
   implicit val JwtSupportSessionF: JwtSupport[F, Session] = JwtSupport.create[F, Session](appConfig.cookie)
 
