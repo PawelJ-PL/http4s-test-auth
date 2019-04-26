@@ -28,7 +28,12 @@ class CookieOrTokenAuthMiddleware[F[_] : Monad, U](
 
     val defaultOnAuthFailure: AuthedService[(TokenAuthenticationFailed, CookieAuthenticationFailed), F] = Kleisli(_ => OptionT.liftF[F, Response[F]](defaultForbiddenResponse))
 
-    AuthMiddleware(authUser, onAuthFailure.getOrElse(defaultOnAuthFailure))
+//    AuthMiddleware(authUser, onAuthFailure.getOrElse(defaultOnAuthFailure))
+    AuthMiddleware.withFallThrough {
+      Kleisli { req =>
+        userFromToken(req).orElse(userFromCookie(req)).toOption
+      }
+    }
   }
 
   private def userFromToken(request: Request[F]): EitherT[F, TokenAuthenticationFailed, U] = for {

@@ -7,8 +7,9 @@ import config.AppConfig
 import domain.userdata.{NoAuthRoutes, TestRoutes}
 import infrastructure.security.jwt.JwtSupport
 import infrastructure.security.social_providers.{FacebookProvider, SocialAuthProvider, SocialUser}
-import infrastructure.security.{CookieOrTokenAuthMiddleware, CustomAuthContext, Session, User}
+import infrastructure.security.{CookieOrTokenAuthMiddleware, LoginRoutes, Session, User, UserFAuthContext}
 import org.http4s.client.Client
+import org.http4s.rho.Router
 import org.http4s.{HttpApp, RequestCookie}
 import org.http4s.rho.swagger.SwaggerSupport
 import org.http4s.server.middleware.Logger
@@ -26,17 +27,17 @@ class MyApp[F[_]: Concurrent](appConfig: AppConfig, httpClient: Client[F]) {
 
   def create: HttpApp[F] = {
     val swaggerMiddleware = SwaggerSupport.apply[F].createRhoMiddleware()
-    val authContext = CustomAuthContext[F]
+    val authContext = UserFAuthContext[F]
     val testRoutes = new TestRoutes(authContext)
 
     val authMiddleware = CookieOrTokenAuthMiddleware(tokenToUser, cookieToUser).create()
 
     val authenticatedTestRoutes = authMiddleware(authContext.toService(testRoutes.toRoutes(swaggerMiddleware)))
-    val noAuthRoutes = new NoAuthRoutes[F].toRoutes(swaggerMiddleware)
+    val noAuthRoutes = (new NoAuthRoutes[F] and new LoginRoutes[F, User](appConfig.authConfig, SocialAuthProviders)).toRoutes(swaggerMiddleware)
 
     Logger.httpApp(logHeaders = true, logBody = true)((
-      noAuthRoutes <+>
-      authenticatedTestRoutes
+      authenticatedTestRoutes <+>
+      noAuthRoutes
     ).orNotFound)
   }
 

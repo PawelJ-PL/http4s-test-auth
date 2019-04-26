@@ -1,6 +1,7 @@
 package infrastructure.security.social_providers
 
 import cats.effect.Sync
+import cats.syntax.applicative._
 import cats.syntax.applicativeError._
 import cats.syntax.functor._
 import cats.syntax.either._
@@ -12,9 +13,20 @@ import org.http4s.client.{Client, UnexpectedStatus}
 
 class FacebookProvider[F[_]: Sync, U](facebookConfig: SocialAuthConfig)(implicit socialUserToU: SocialUser => U, client: Client[F]) extends SocialAuthProvider[F, U] {
   final val ProviderName = "facebook"
+  private final val FacebookBaseUrl: Uri = Uri.uri("https://www.facebook.com")
   private final val GraphBaseUri: Uri = Uri.uri("https://graph.facebook.com")
 
   private implicit val userDataResponseDecoder: EntityDecoder[F, UserDataResponse] = jsonOf[F, UserDataResponse]
+
+
+  override def getLoginAddress(returnUri: String): F[Uri] =
+    FacebookBaseUrl
+        .withPath("/v3.1/dialog/oauth")
+        .withQueryParam("client_id", facebookConfig.clientId)
+        .withQueryParam("redirect_uri", returnUri)
+        .withQueryParam("response_type", "code")
+        .withQueryParam("scope", "email")
+      .pure[F]
 
   override def userFromAccessToken(accessToken: String): F[Either[QueryFailed, U]] = {
     val uri = GraphBaseUri

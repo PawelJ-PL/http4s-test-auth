@@ -9,7 +9,7 @@ import cats.syntax.flatMap._
 import config.CookieConfig
 import io.circe.{Decoder, DecodingFailure, Encoder}
 import io.circe.syntax._
-import tsec.mac.jca.{HMACSHA256, MacSigningKey}
+import tsec.mac.jca.HMACSHA256
 import tsec.jwt._
 import tsec.jws.mac._
 

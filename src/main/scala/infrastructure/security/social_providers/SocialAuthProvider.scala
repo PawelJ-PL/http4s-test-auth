@@ -1,8 +1,9 @@
 package infrastructure.security.social_providers
 
-import org.http4s.Status
+import org.http4s.{Status, Uri}
 
 trait SocialAuthProvider[F[_], U] {
+  def getLoginAddress(returnUri: String): F[Uri]
   def userFromAccessToken(accessToken: String): F[Either[QueryFailed, U]]
 }
 
