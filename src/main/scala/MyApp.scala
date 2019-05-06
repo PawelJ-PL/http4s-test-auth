@@ -8,11 +8,14 @@ import domain.userdata.{NoAuthEndpoints, TestEndpoints}
 import infrastructure.http.ErrorResponse
 import infrastructure.security.jwt.JwtSupport
 import infrastructure.security.social_providers.{FacebookProvider, SocialAuthProvider, SocialUser}
-import infrastructure.security.{AuthFailedResult, AuthInputs, Authentication, CookieOrTokenAuthMiddleware, Session, User}
+import infrastructure.security.{AuthFailedResult, AuthInputs, Authentication, Session, User}
+import infrastructure.swagger.SwaggerEndpoints
 import org.http4s.client.Client
-import org.http4s.{HttpApp, RequestCookie}
+import org.http4s.HttpApp
 import org.http4s.server.middleware.Logger
 import org.http4s.syntax.all._
+import tapir.docs.openapi._
+import tapir.openapi.OpenAPI
 
 class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Client[F]) {
   final implicit val socialToUser: SocialUser => User = (sU: SocialUser) => User(sU.id, sU.provider, sU.email, sU.firstName, sU.lastName)
@@ -25,17 +28,20 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
   final val DefaultProvider = "facebook"
 
   def create: HttpApp[F] = {
-//    val authMiddleware = CookieOrTokenAuthMiddleware(tokenToUser, cookieToUser).create()
     val auth = Authentication[F, User](tokenToUser, cookieToUser)
 
-    val authenticatedTestRoutes = new NoAuthEndpoints[F].routes
+    val authenticatedTestEndpoints = new NoAuthEndpoints[F]
     val authDetailsToUser: AuthInputs => F[Either[AuthFailedResult, User]] = auth.authDetailsToUser
     val authDetailsToUSerWithErrorResponse = authDetailsToUser.andThen(_.map(_.leftMap(mapAuthErrorToStatusCode)))
-    val userRoutes = new TestEndpoints[F, User](authDetailsToUSerWithErrorResponse).routes
+    val userEndpoints = new TestEndpoints[F, User](authDetailsToUSerWithErrorResponse)
+
+    val docs: OpenAPI = (authenticatedTestEndpoints.endpoints ++ userEndpoints.endpoints).toOpenAPI("Test App", "1.0.0")
+    val swaggerRoutes = new SwaggerEndpoints[F](docs).routes
 
     Logger.httpApp(logHeaders = true, logBody = true)((
-      authenticatedTestRoutes <+>
-      userRoutes
+      authenticatedTestEndpoints.routes <+>
+      userEndpoints.routes <+>
+      swaggerRoutes
     ).orNotFound)
   }
 

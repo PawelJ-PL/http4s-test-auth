@@ -12,12 +12,12 @@ import tapir.server.http4s._
 import tapir.json.circe._
 
 class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Either[ErrorResponse, U]]) {
+  lazy val routes: HttpRoutes[F] = userDataEndpoint.toRoutes(authToUser.andThenFirstE((genUserData _).tupled))
+  lazy val endpoints = List(userDataEndpoint)
 
   val authDetails: EndpointInput[AuthInputs] = cookie[Option[String]]("session")
     .and(header[Option[String]]("Authorization"))
     .mapTo(AuthInputs)
-
-  lazy val routes: HttpRoutes[F] = userDataEndpoint.toRoutes(authToUser.andThenFirstE((genUserData _).tupled))
 
   private val userDataEndpoint: Endpoint[(AuthInputs, String), ErrorResponse, String, Nothing] = endpoint
     .get
