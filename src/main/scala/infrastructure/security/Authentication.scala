@@ -2,17 +2,14 @@ package infrastructure.security
 
 import cats.Monad
 import cats.data.EitherT
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.semiauto._
 import org.http4s.util.CaseInsensitiveString
-import tapir.{Codec, Schema, SchemaFor}
 
 class Authentication[F[_]: Monad, U] {
   def authDetailsToUser(authDetails: AuthInputs): F[Either[AuthFailedResult, U]] = {
     println(authDetails)
     userFromToken(authDetails.authorizationHeader)
       .leftFlatMap(tokenAuthFailed =>userFromCookie(authDetails.cookie)
-        .leftFlatMap(cookieAuthFailed => EitherT.leftT[F, U](AuthFailedResult("tokenAuthFailed", "cookieAuthFailed"))))
+        .leftFlatMap(cookieAuthFailed => EitherT.leftT[F, U](AuthFailedResult(tokenAuthFailed, cookieAuthFailed))))
       .value
   }
 
@@ -31,13 +28,7 @@ object Authentication {
 
 case class AuthInputs(cookie: Option[String], authorizationHeader: Option[String])
 
-final case class AuthFailedResult(tokenResult: String, cookieResult: String)
-object AuthFailedResult {
-//  implicit val codec: Codec[AuthFailedResult, Json, _] = ???
-//  implicit val schemaFor: SchemaFor[AuthFailedResult] = SchemaFor(Schema.SString)
-  implicit val decoder: Decoder[AuthFailedResult] = deriveDecoder[AuthFailedResult]
-  implicit val encoder: Encoder[AuthFailedResult] =deriveEncoder[AuthFailedResult]
-}
+final case class AuthFailedResult(tokenResult: TokenAuthenticationFailed, cookieResult: CookieAuthenticationFailed)
 
 sealed trait TokenAuthenticationFailed extends Product with Serializable
 

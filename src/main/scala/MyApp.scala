@@ -1,12 +1,14 @@
 import cats.data.EitherT
 import cats.effect.{Concurrent, ContextShift}
+import cats.syntax.either._
 import cats.syntax.functor._
 import cats.syntax.semigroupk._
 import config.AppConfig
 import domain.userdata.{NoAuthEndpoints, TestEndpoints}
+import infrastructure.http.ErrorResponse
 import infrastructure.security.jwt.JwtSupport
 import infrastructure.security.social_providers.{FacebookProvider, SocialAuthProvider, SocialUser}
-import infrastructure.security.{AuthInputs, Authentication, CookieOrTokenAuthMiddleware, Session, User}
+import infrastructure.security.{AuthFailedResult, AuthInputs, Authentication, CookieOrTokenAuthMiddleware, Session, User}
 import org.http4s.client.Client
 import org.http4s.{HttpApp, RequestCookie}
 import org.http4s.server.middleware.Logger
@@ -27,7 +29,9 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
     val auth = Authentication[F, User]()
 
     val authenticatedTestRoutes = new NoAuthEndpoints[F].routes
-    val userRoutes = new TestEndpoints[F, User](auth.authDetailsToUser).routes
+    val authDetailsToUser: AuthInputs => F[Either[AuthFailedResult, User]] = auth.authDetailsToUser
+    val authDetailsToUSerWithErrorResponse = authDetailsToUser.andThen(_.map(_.leftMap(mapAuthErrorToStatusCode)))
+    val userRoutes = new TestEndpoints[F, User](authDetailsToUSerWithErrorResponse).routes
 
     Logger.httpApp(logHeaders = true, logBody = true)((
       authenticatedTestRoutes <+>
@@ -59,5 +63,8 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
     }
   }
 
-//  private def authHeaderToUser(headerOpt: Option[String])
+  private def mapAuthErrorToStatusCode(result: AuthFailedResult): ErrorResponse = {
+    println("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC " + result)
+    ErrorResponse(statusCode = 401, message = result.toString)
+  }
 }

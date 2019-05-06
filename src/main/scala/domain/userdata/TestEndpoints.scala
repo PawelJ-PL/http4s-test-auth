@@ -1,34 +1,34 @@
 package domain.userdata
 
 import cats.effect.{ContextShift, Sync}
-import infrastructure.security.{AuthFailedResult, AuthInputs}
+import infrastructure.http.ErrorResponse
+import infrastructure.security.AuthInputs
 import org.http4s.HttpRoutes
 import tapir._
 import tapir.model.StatusCodes
 import tapir.server.http4s._
 import tapir.json.circe._
 
-class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Either[AuthFailedResult, U]]) {
+class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Either[ErrorResponse, U]]) {
 
-  auth.bearer
   val authDetails: EndpointInput[AuthInputs] = cookie[Option[String]]("session")
     .and(header[Option[String]]("Authorization"))
     .mapTo(AuthInputs)
 
   lazy val routes: HttpRoutes[F] = userDataEndpoint.toRoutes(authToUser.andThenFirstE((genUserData _).tupled))
 
-  private val userDataEndpoint: Endpoint[(AuthInputs, String), AuthFailedResult, String, Nothing] = endpoint
+  private val userDataEndpoint: Endpoint[(AuthInputs, String), ErrorResponse, String, Nothing] = endpoint
     .get
     .in(authDetails)
     .in("user-data" / path[String])
     .out(plainBody[String])
     .errorOut(
       statusFrom(
-        jsonBody[AuthFailedResult],
+        jsonBody[ErrorResponse],
         StatusCodes.BadRequest,
-        (whenClass[AuthFailedResult], StatusCodes.Unauthorized)
+        (whenValue[ErrorResponse](_.statusCode == 401), StatusCodes.Unauthorized)
       )
     )
 
-  private def genUserData(user: U, extras: String): F[Either[AuthFailedResult, String]] = ??? // Either.right[String, String](s"Extras").pure[F]
+  private def genUserData(user: U, extras: String): F[Either[ErrorResponse, String]] = ??? // Either.right[String, String](s"Extras").pure[F]
 }
