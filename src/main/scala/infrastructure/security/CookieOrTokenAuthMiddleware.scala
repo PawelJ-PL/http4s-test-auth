@@ -44,7 +44,7 @@ class CookieOrTokenAuthMiddleware[F[_] : Monad, U](
 
   private def extractBearerToken(credentials: Credentials): Either[TokenAuthenticationFailed, String] = credentials.authScheme match {
     case AuthScheme.Bearer => Right(credentials.toString().substring(AuthScheme.Bearer.length).trim)
-    case scheme            => Left(TokenAuthenticationFailed.NotValidAuthScheme(Set(AuthScheme.Bearer), scheme))
+    case scheme            => Left(TokenAuthenticationFailed.NotValidAuthScheme)
   }
 
   private def userFromCookie(request: Request[F]): EitherT[F, CookieAuthenticationFailed, U] = for {

@@ -1,12 +1,14 @@
 package infrastructure.security
 
+import cats.syntax.bifunctor._
 import cats.Monad
 import cats.data.EitherT
-import org.http4s.util.CaseInsensitiveString
 
-class Authentication[F[_]: Monad, U] {
+class Authentication[F[_]: Monad, U](
+                                      retrieveUserFromToken: String => F[Option[U]],
+                                      retrieveUserFromCookie: String => F[Option[U]]
+                                    ) {
   def authDetailsToUser(authDetails: AuthInputs): F[Either[AuthFailedResult, U]] = {
-    println(authDetails)
     userFromToken(authDetails.authorizationHeader)
       .leftFlatMap(tokenAuthFailed =>userFromCookie(authDetails.cookie)
         .leftFlatMap(cookieAuthFailed => EitherT.leftT[F, U](AuthFailedResult(tokenAuthFailed, cookieAuthFailed))))
@@ -14,16 +16,30 @@ class Authentication[F[_]: Monad, U] {
   }
 
   private def userFromToken(headerOpt: Option[String]): EitherT[F, TokenAuthenticationFailed, U]  = {
-    EitherT.leftT[F, U](TokenAuthenticationFailed.AuthorizationHeaderNotFound)
+    for {
+      header <- EitherT.fromOption[F](headerOpt, TokenAuthenticationFailed.AuthorizationHeaderNotFound)
+      token  <- EitherT.fromEither(extractBearerToken(header))
+      user   <- EitherT.fromOptionF(retrieveUserFromToken(token), UserNotFound).leftWiden[TokenAuthenticationFailed]
+    } yield user
+  }
+
+  private def extractBearerToken(headerValue: String): Either[TokenAuthenticationFailed, String] = if (headerValue.toLowerCase.startsWith("bearer ")) {
+    Right(headerValue.substring(7).trim)
+  } else {
+    Left(TokenAuthenticationFailed.NotValidAuthScheme)
   }
 
   private def userFromCookie(cookieValOpt: Option[String]): EitherT[F, CookieAuthenticationFailed, U] = {
-    EitherT.leftT[F, U](CookieAuthenticationFailed.NoCookieFound)
+    for {
+      cookieVal <- EitherT.fromOption[F](cookieValOpt, CookieAuthenticationFailed.CookieNotFound("session")).leftWiden[CookieAuthenticationFailed]
+      user      <- EitherT.fromOptionF(retrieveUserFromCookie(cookieVal), UserNotFound).leftWiden[CookieAuthenticationFailed]
+    } yield user
   }
 }
 
 object Authentication {
-  def apply[F[_]: Monad, U](): Authentication[F, U] = new Authentication[F, U]()
+  def apply[F[_]: Monad, U](retrieveUserFromToken: String => F[Option[U]], retrieveUserFromCookie: String => F[Option[U]]): Authentication[F, U] =
+    new Authentication[F, U](retrieveUserFromToken, retrieveUserFromCookie)
 }
 
 case class AuthInputs(cookie: Option[String], authorizationHeader: Option[String])
@@ -34,7 +50,7 @@ sealed trait TokenAuthenticationFailed extends Product with Serializable
 
 object TokenAuthenticationFailed {
   case object AuthorizationHeaderNotFound extends TokenAuthenticationFailed
-  case class NotValidAuthScheme(expected: Set[CaseInsensitiveString], actual: CaseInsensitiveString) extends TokenAuthenticationFailed
+  case object NotValidAuthScheme extends TokenAuthenticationFailed
 }
 
 sealed trait CookieAuthenticationFailed extends Product with Serializable

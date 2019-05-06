@@ -26,7 +26,7 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
 
   def create: HttpApp[F] = {
 //    val authMiddleware = CookieOrTokenAuthMiddleware(tokenToUser, cookieToUser).create()
-    val auth = Authentication[F, User]()
+    val auth = Authentication[F, User](tokenToUser, cookieToUser)
 
     val authenticatedTestRoutes = new NoAuthEndpoints[F].routes
     val authDetailsToUser: AuthInputs => F[Either[AuthFailedResult, User]] = auth.authDetailsToUser
@@ -53,8 +53,8 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
     }
   }
 
-  private def cookieToUser(cookie: RequestCookie): F[Option[User]] = {
-    JwtSupport[F, Session].decodeToken(cookie.content).map {
+  private def cookieToUser(cookie: String): F[Option[User]] = {
+    JwtSupport[F, Session].decodeToken(cookie).map {
       case Left(err) =>
         println("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB " + err)
         None

@@ -1,6 +1,8 @@
 package domain.userdata
 
 import cats.effect.{ContextShift, Sync}
+import cats.syntax.applicative._
+import cats.syntax.either._
 import infrastructure.http.ErrorResponse
 import infrastructure.security.AuthInputs
 import org.http4s.HttpRoutes
@@ -30,5 +32,5 @@ class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Eit
       )
     )
 
-  private def genUserData(user: U, extras: String): F[Either[ErrorResponse, String]] = ??? // Either.right[String, String](s"Extras").pure[F]
+  private def genUserData(user: U, extras: String): F[Either[ErrorResponse, String]] = Either.right[ErrorResponse, String](s"Extras $extras of $user").pure[F]
 }
