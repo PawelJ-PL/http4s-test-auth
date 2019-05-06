@@ -66,18 +66,18 @@ object CookieOrTokenAuthMiddleware {
   def defaultForbiddenResponse[F[_]: Applicative]: F[Response[F]] = Response[F](Status.Unauthorized).pure[F]
 }
 
-sealed trait TokenAuthenticationFailed extends Product with Serializable
+//sealed trait TokenAuthenticationFailed extends Product with Serializable
 
-object TokenAuthenticationFailed {
-  case object AuthorizationHeaderNotFound extends TokenAuthenticationFailed
-  case class NotValidAuthScheme(expected: Set[CaseInsensitiveString], actual: CaseInsensitiveString) extends TokenAuthenticationFailed
-}
-
-sealed trait CookieAuthenticationFailed extends Product with Serializable
-
-object CookieAuthenticationFailed {
-  case object NoCookieFound extends CookieAuthenticationFailed
-  case class CookieNotFound(name: String) extends CookieAuthenticationFailed
-}
-
-case object UserNotFound extends TokenAuthenticationFailed with CookieAuthenticationFailed
+//object TokenAuthenticationFailed {
+//  case object AuthorizationHeaderNotFound extends TokenAuthenticationFailed
+//  case class NotValidAuthScheme(expected: Set[CaseInsensitiveString], actual: CaseInsensitiveString) extends TokenAuthenticationFailed
+//}
+//
+//sealed trait CookieAuthenticationFailed extends Product with Serializable
+//
+//object CookieAuthenticationFailed {
+//  case object NoCookieFound extends CookieAuthenticationFailed
+//  case class CookieNotFound(name: String) extends CookieAuthenticationFailed
+//}
+//
+//case object UserNotFound extends TokenAuthenticationFailed with CookieAuthenticationFailed
