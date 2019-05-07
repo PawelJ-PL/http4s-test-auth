@@ -1,5 +1,5 @@
 import cats.data.EitherT
-import cats.effect.{Concurrent, ContextShift}
+import cats.effect.{Concurrent, ContextShift, Effect, Sync}
 import cats.syntax.either._
 import cats.syntax.functor._
 import cats.syntax.semigroupk._
@@ -17,7 +17,9 @@ import org.http4s.syntax.all._
 import tapir.docs.openapi._
 import tapir.openapi.OpenAPI
 
-class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Client[F]) {
+import scala.concurrent.ExecutionContext
+
+class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Client[F], blockingExecutionContext: ExecutionContext, effectF: Effect[F]) {
   final implicit val socialToUser: SocialUser => User = (sU: SocialUser) => User(sU.id, sU.provider, sU.email, sU.firstName, sU.lastName)
   implicit val client: Client[F] = httpClient
   implicit val JwtSupportSessionF: JwtSupport[F, Session] = JwtSupport.create[F, Session](appConfig.cookie)
@@ -36,7 +38,7 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
     val userEndpoints = new TestEndpoints[F, User](authDetailsToUSerWithErrorResponse)
 
     val docs: OpenAPI = (authenticatedTestEndpoints.endpoints ++ userEndpoints.endpoints).toOpenAPI("Test App", "1.0.0")
-    val swaggerRoutes = new SwaggerEndpoints[F](docs).routes
+    val swaggerRoutes = new SwaggerEndpoints[F](docs, blockingExecutionContext, effectF).routes
 
     Logger.httpApp(logHeaders = true, logBody = true)((
       authenticatedTestEndpoints.routes <+>
@@ -52,7 +54,6 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
     } yield user).value
     userOrError.map {
       case Left(err) =>
-        println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA " + err)
         None
       case Right(user) =>
         Some(user)
@@ -62,7 +63,6 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
   private def cookieToUser(cookie: String): F[Option[User]] = {
     JwtSupport[F, Session].decodeToken(cookie).map {
       case Left(err) =>
-        println("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB " + err)
         None
       case Right(session) =>
         Some(session.user)
@@ -70,7 +70,6 @@ class MyApp[F[_]: Concurrent: ContextShift](appConfig: AppConfig, httpClient: Cl
   }
 
   private def mapAuthErrorToStatusCode(result: AuthFailedResult): ErrorResponse = {
-    println("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC " + result)
     ErrorResponse(statusCode = 401, message = result.toString)
   }
 }

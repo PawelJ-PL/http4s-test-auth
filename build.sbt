@@ -20,6 +20,7 @@ libraryDependencies += "com.softwaremill.tapir" %% "tapir-http4s-server" % "0.7.
 libraryDependencies += "com.softwaremill.tapir" %% "tapir-json-circe" % "0.7.6"
 libraryDependencies += "com.softwaremill.tapir" %% "tapir-openapi-docs" % "0.7.6"
 libraryDependencies += "com.softwaremill.tapir" %% "tapir-openapi-circe-yaml" % "0.7.6"
+libraryDependencies += "org.webjars" % "swagger-ui" % "3.22.0"
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3"
 libraryDependencies += "com.github.pureconfig" %% "pureconfig" % "0.10.2"
 libraryDependencies += "io.circe" %% "circe-core" % "0.11.1"

@@ -43,7 +43,7 @@ class NoAuthEndpoints[F[_]: ContextShift: Sync](implicit jwtSupport: JwtSupport[
   private def genLogin(user: String): F[Either[Unit, (String, SetCookieValue)]] = {
     for {
       jwt    <- JwtSupport[F, Session].generateToken(Session(User(user, "local", "some@example.org", None, None)))
-      output <- ("Hello user", SetCookieValue(value = jwt)).asRight[Unit].pure[F]
+      output <- ("Hello user", SetCookieValue(value = jwt, path = Some("/"))).asRight[Unit].pure[F]
     } yield output
   }
 }
