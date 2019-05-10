@@ -14,7 +14,8 @@ import tapir.model.StatusCodes
 import tapir.server.http4s._
 import tapir.json.circe._
 
-class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Either[ErrorResponse, U]]) {
+class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Either[ErrorResponse, U]])(implicit serverOpt: Http4sServerOptions[F]) {
+
   lazy val routes: HttpRoutes[F] =
     userDataEndpoint.toRoutes(authToUser.andThenFirstE((genUserData _).tupled)) <+>
     someDataEndpoint.toRoutes(authToUser.andThenFirstE((genSomeData _).tupled))
@@ -33,7 +34,7 @@ class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Eit
       statusFrom(
         jsonBody[ErrorResponse],
         StatusCodes.BadRequest,
-        (whenValue[ErrorResponse](_.statusCode == 401), StatusCodes.Unauthorized)
+        whenValue[ErrorResponse](_.statusCode == 401) -> StatusCodes.Unauthorized
       )
     )
 
@@ -49,8 +50,8 @@ class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Eit
       statusFrom(
         jsonBody[ErrorResponse],
         StatusCodes.BadRequest,
-        (whenValue[ErrorResponse](_.statusCode == StatusCodes.Unauthorized), StatusCodes.Unauthorized)
-//        (whenValue[ErrorResponse](_.statusCode == StatusCodes.UnprocessableEntity), StatusCodes.UnprocessableEntity)
+        whenValue[ErrorResponse](_.statusCode == StatusCodes.Unauthorized) -> StatusCodes.Unauthorized,
+        whenValue[ErrorResponse](_.statusCode == StatusCodes.UnprocessableEntity) -> StatusCodes.UnprocessableEntity
       )
     )
 
@@ -58,6 +59,9 @@ class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Eit
     case SomeData("", 0) => ErrorResponse(StatusCodes.UnprocessableEntity, "Empty data").asLeft[SomeData].pure[F]
     case SomeData(x, y)  => SomeData(x + " ABC", y * 3).asRight[ErrorResponse].pure[F]
   }
+
+  private val authBeginEndpoint: Endpoint[Unit, Unit, Unit, Nothing] = endpoint
+    .in("auth" / "begin")
 }
 
 case class SomeData(x: String, y: Int)

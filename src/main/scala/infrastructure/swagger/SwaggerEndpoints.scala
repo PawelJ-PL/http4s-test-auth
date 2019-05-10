@@ -1,6 +1,6 @@
 package infrastructure.swagger
 
-import cats.effect.{ContextShift, Effect, Sync}
+import cats.effect.{ContextShift, Effect}
 import cats.syntax.semigroupk._
 import org.http4s.{HttpRoutes, Uri}
 import org.http4s.dsl.Http4sDsl
@@ -12,8 +12,7 @@ import tapir.openapi.circe.yaml._
 
 import scala.concurrent.ExecutionContext
 
-class SwaggerEndpoints[F[_]: ContextShift](docs: OpenAPI, blockingExecutionContext: ExecutionContext, effectF: Effect[F]) extends Http4sDsl[F] {
-  implicit val e: Effect[F] = effectF // FIXME, temporary workaround
+class SwaggerEndpoints[F[_]: Effect: ContextShift](docs: OpenAPI, blockingExecutionContext: ExecutionContext) extends Http4sDsl[F] {
   val routes: HttpRoutes[F] = openApiYaml <+> swaggerUiWebjar <+> swaggerUi
 
   private def openApiYaml: HttpRoutes[F] = HttpRoutes.of[F] {

@@ -12,12 +12,11 @@ import scala.concurrent.ExecutionContext.global
 object Application extends IOApp {
   def createServerResource[F[_]: ConcurrentEffect: Timer: ContextShift](implicit S: Sync[F]): Resource[F, Server[F]] = for {
     config <- Resource.liftF(AppConfig.load[F])
-    effectF = implicitly(Effect[F]) //FIXME: temporary workaround
     client <- BlazeClientBuilder(global).resource
     blockingEc <- Resource.make(S.delay(ExecutionContext.fromExecutorService(Executors.newCachedThreadPool)))(ec => S.delay(ec.shutdown()))
     server <- BlazeServerBuilder[F]
       .bindHttp(8787, "0.0.0.0")
-      .withHttpApp(new MyApp[F](config, client, blockingEc, effectF).create)
+      .withHttpApp(new MyApp[F](config, client, blockingEc).create)
       .resource
   } yield server
 
