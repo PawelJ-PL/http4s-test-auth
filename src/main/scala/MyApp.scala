@@ -1,24 +1,37 @@
 import cats.data.EitherT
-import cats.effect.Concurrent
-import cats.syntax.applicative._
+import cats.effect.{ConcurrentEffect, ContextShift}
+import cats.syntax.either._
 import cats.syntax.functor._
 import cats.syntax.semigroupk._
 import config.AppConfig
-import domain.userdata.{NoAuthRoutes, TestRoutes}
+import domain.userdata.{NoAuthEndpoints, TestEndpoints}
+import infrastructure.http.ErrorResponse
 import infrastructure.security.jwt.JwtSupport
 import infrastructure.security.social_providers.{FacebookProvider, SocialAuthProvider, SocialUser}
-import infrastructure.security.{CookieOrTokenAuthMiddleware, LoginRoutes, Session, User, UserFAuthContext}
+import infrastructure.security.{AuthFailedResult, AuthInputs, Authentication, Session, User}
+import infrastructure.swagger.SwaggerEndpoints
 import org.http4s.client.Client
-import org.http4s.rho.Router
-import org.http4s.{HttpApp, RequestCookie}
-import org.http4s.rho.swagger.SwaggerSupport
+import org.http4s.{HttpApp, Request}
 import org.http4s.server.middleware.Logger
 import org.http4s.syntax.all._
+import tapir._
+import tapir.json.circe._
+import tapir.docs.openapi._
+import tapir.model.StatusCode
+import tapir.openapi.OpenAPI
+import tapir.server.{DecodeFailureHandler, DecodeFailureHandling, ServerDefaults}
+import tapir.server.http4s.Http4sServerOptions
 
-class MyApp[F[_]: Concurrent](appConfig: AppConfig, httpClient: Client[F]) {
+import scala.concurrent.ExecutionContext
+
+class MyApp[F[_]: ConcurrentEffect: ContextShift](appConfig: AppConfig, httpClient: Client[F], blockingExecutionContext: ExecutionContext) {
   final implicit val socialToUser: SocialUser => User = (sU: SocialUser) => User(sU.id, sU.provider, sU.email, sU.firstName, sU.lastName)
   implicit val client: Client[F] = httpClient
   implicit val JwtSupportSessionF: JwtSupport[F, Session] = JwtSupport.create[F, Session](appConfig.cookie)
+
+  def failResponse(code: StatusCode, msg: String): DecodeFailureHandling = DecodeFailureHandling.response(jsonBody[ErrorResponse])(ErrorResponse(code, msg))
+  val handleDecodeFailure: DecodeFailureHandler[Request[F]] = ServerDefaults.decodeFailureHandlerUsingResponse(failResponse)
+  implicit val myOpts: Http4sServerOptions[F] = Http4sServerOptions.default.copy(decodeFailureHandler = handleDecodeFailure)
 
   final val SocialAuthProviders: Map[String, Option[SocialAuthProvider[F, User]]] = Map(
     "facebook" -> appConfig.socialAuthConfigs.get("facebook").map(cfg => new FacebookProvider[F, User](cfg))
@@ -26,18 +39,20 @@ class MyApp[F[_]: Concurrent](appConfig: AppConfig, httpClient: Client[F]) {
   final val DefaultProvider = "facebook"
 
   def create: HttpApp[F] = {
-    val swaggerMiddleware = SwaggerSupport.apply[F].createRhoMiddleware()
-    val authContext = UserFAuthContext[F]
-    val testRoutes = new TestRoutes(authContext)
+    val auth = Authentication[F, User](tokenToUser, cookieToUser)
 
-    val authMiddleware = CookieOrTokenAuthMiddleware(tokenToUser, cookieToUser).create()
+    val authenticatedTestEndpoints = new NoAuthEndpoints[F]
+    val authDetailsToUser: AuthInputs => F[Either[AuthFailedResult, User]] = auth.authDetailsToUser
+    val authDetailsToUSerWithErrorResponse = authDetailsToUser.andThen(_.map(_.leftMap(mapAuthErrorToStatusCode)))
+    val userEndpoints = new TestEndpoints[F, User](authDetailsToUSerWithErrorResponse)
 
-    val authenticatedTestRoutes = authMiddleware(authContext.toService(testRoutes.toRoutes(swaggerMiddleware)))
-    val noAuthRoutes = (new NoAuthRoutes[F] and new LoginRoutes[F, User](appConfig.authConfig, SocialAuthProviders)).toRoutes(swaggerMiddleware)
+    val docs: OpenAPI = (authenticatedTestEndpoints.endpoints ++ userEndpoints.endpoints).toOpenAPI("Test App", "1.0.0")
+    val swaggerRoutes = new SwaggerEndpoints[F](docs, blockingExecutionContext).routes
 
     Logger.httpApp(logHeaders = true, logBody = true)((
-      authenticatedTestRoutes <+>
-      noAuthRoutes
+      authenticatedTestEndpoints.routes <+>
+      userEndpoints.routes <+>
+      swaggerRoutes
     ).orNotFound)
   }
 
@@ -48,20 +63,22 @@ class MyApp[F[_]: Concurrent](appConfig: AppConfig, httpClient: Client[F]) {
     } yield user).value
     userOrError.map {
       case Left(err) =>
-        println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA " + err)
         None
       case Right(user) =>
         Some(user)
     }
   }
 
-  private def cookieToUser(cookie: RequestCookie): F[Option[User]] = {
-    JwtSupport[F, Session].decodeToken(cookie.content).map {
+  private def cookieToUser(cookie: String): F[Option[User]] = {
+    JwtSupport[F, Session].decodeToken(cookie).map {
       case Left(err) =>
-        println("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB " + err)
         None
       case Right(session) =>
         Some(session.user)
     }
+  }
+
+  private def mapAuthErrorToStatusCode(result: AuthFailedResult): ErrorResponse = {
+    ErrorResponse(statusCode = 401, message = result.toString)
   }
 }
