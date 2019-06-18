@@ -10,25 +10,27 @@ import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import org.http4s.HttpRoutes
 import tapir._
-import tapir.model.StatusCodes
+import tapir.model.{ServerRequest, StatusCodes}
 import tapir.server.http4s._
 import tapir.json.circe._
 
-class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Either[ErrorResponse, U]])(implicit serverOpt: Http4sServerOptions[F]) {
+class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: String => AuthInputs => F[Either[ErrorResponse, U]])(implicit serverOpt: Http4sServerOptions[F]) {
 
   lazy val routes: HttpRoutes[F] =
-    userDataEndpoint.toRoutes(authToUser.andThenFirstE((genUserData _).tupled)) <+>
-    someDataEndpoint.toRoutes(authToUser.andThenFirstE((genSomeData _).tupled))
+    userDataEndpoint.toRoutes(authToUser("userRole").andThenFirstE((genUserData _).tupled)) <+>
+    someDataEndpoint.toRoutes(authToUser("adminRole").andThenFirstE((genSomeData _).tupled))
   lazy val endpoints = List(userDataEndpoint, someDataEndpoint)
 
-  val authDetails: EndpointInput[AuthInputs] = cookie[Option[String]]("session")
-    .and(header[Option[String]]("Authorization"))
+  val authDetails: EndpointInput[AuthInputs] = auth.apiKey(cookie[Option[String]]("session"))
+    .and(auth.apiKey(header[Option[String]]("Authorization")))
+    .and(auth.apiKey(header[Option[String]]("Csrf")))
+    .and(extractFromRequest[ServerRequest](req => req))
     .mapTo(AuthInputs)
 
-  private val userDataEndpoint: Endpoint[(AuthInputs, String), ErrorResponse, String, Nothing] = endpoint
+  private val userDataEndpoint: Endpoint[(AuthInputs, String, Long), ErrorResponse, String, Nothing] = endpoint
     .get
     .in(authDetails)
-    .in("user-data" / path[String].name("extras").description("User extras").example("something"))
+    .in("user-data" / path[String].name("extras").description("User extras").example("something") / path[Long]("id"))
     .out(plainBody[String])
     .errorOut(
       statusFrom(
@@ -38,7 +40,8 @@ class TestEndpoints[F[_]: Sync: ContextShift, U](authToUser: AuthInputs => F[Eit
       )
     )
 
-  private def genUserData(user: U, extras: String): F[Either[ErrorResponse, String]] = Either.right[ErrorResponse, String](s"Extras $extras of $user").pure[F]
+  private def genUserData(user: U, extras: String, id: Long): F[Either[ErrorResponse, String]] = Either.right[ErrorResponse, String](s"Extras $extras of $user").pure[F]
+  def x(user: U): F[Either[ErrorResponse, U]] = ???
 
   private val someDataEndpoint: Endpoint[(AuthInputs, SomeData), ErrorResponse, SomeData, Nothing] = endpoint
     .post

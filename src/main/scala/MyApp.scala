@@ -30,7 +30,16 @@ class MyApp[F[_]: ConcurrentEffect: ContextShift](appConfig: AppConfig, httpClie
   implicit val JwtSupportSessionF: JwtSupport[F, Session] = JwtSupport.create[F, Session](appConfig.cookie)
 
   def failResponse(code: StatusCode, msg: String): DecodeFailureHandling = DecodeFailureHandling.response(jsonBody[ErrorResponse])(ErrorResponse(code, msg))
-  val handleDecodeFailure: DecodeFailureHandler[Request[F]] = ServerDefaults.decodeFailureHandlerUsingResponse(failResponse)
+//  val handleDecodeFailure: DecodeFailureHandler[Request[F]] = ServerDefaults.decodeFailureHandlerUsingResponse(failResponse)
+  val handleDecodeFailure: DecodeFailureHandler[Request[F]] = (req, input, failure) => {
+    failure match {
+      case DecodeResult.Missing => println("Decode missing")
+      case DecodeResult.Error(orig, error) => println(s"Decode error. Orig: $orig, error: $error")
+      case DecodeResult.Mismatch(expected, actual) => println(s"Decode mismatch. Expected: $expected, actual $actual")
+      case DecodeResult.Multiple(vs) => println(s"Decode failure multiple: $vs")
+    }
+    ServerDefaults.decodeFailureHandlerUsingResponse(failResponse)(req, input, failure)
+  }
   implicit val myOpts: Http4sServerOptions[F] = Http4sServerOptions.default.copy(decodeFailureHandler = handleDecodeFailure)
 
   final val SocialAuthProviders: Map[String, Option[SocialAuthProvider[F, User]]] = Map(
@@ -39,11 +48,11 @@ class MyApp[F[_]: ConcurrentEffect: ContextShift](appConfig: AppConfig, httpClie
   final val DefaultProvider = "facebook"
 
   def create: HttpApp[F] = {
-    val auth = Authentication[F, User](tokenToUser, cookieToUser)
+    val auth = Authentication[F, User](tokenToUser, cookieToUser, (u: User, r: String) => u.email.startsWith(r))
 
     val authenticatedTestEndpoints = new NoAuthEndpoints[F]
-    val authDetailsToUser: AuthInputs => F[Either[AuthFailedResult, User]] = auth.authDetailsToUser
-    val authDetailsToUSerWithErrorResponse = authDetailsToUser.andThen(_.map(_.leftMap(mapAuthErrorToStatusCode)))
+    def authDetailsToUser(requiredRole: String): AuthInputs => F[Either[AuthFailedResult, User]] = auth.authDetailsToUser(requiredRole)
+    def authDetailsToUSerWithErrorResponse(requiredRole: String): AuthInputs => F[Either[ErrorResponse, User]] = authDetailsToUser(requiredRole).andThen(_.map(_.leftMap(mapAuthErrorToStatusCode)))
     val userEndpoints = new TestEndpoints[F, User](authDetailsToUSerWithErrorResponse)
 
     val docs: OpenAPI = (authenticatedTestEndpoints.endpoints ++ userEndpoints.endpoints).toOpenAPI("Test App", "1.0.0")
